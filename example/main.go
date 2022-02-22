@@ -38,6 +38,12 @@ func main() {
 		},
 	}
 
+	fmt.Println("Starting:")
+
+	for i := 3; i > 0; i, _ = i-1, <-time.After(time.Millisecond*500) {
+		fmt.Println(i)
+	}
+
 	cl := checklist.NewCheckList(
 		os.Stdout,
 		[]string{"NAME", "INFO", "MESSAGE", "ERROR"},
@@ -47,13 +53,11 @@ func main() {
 			checkerForItem(items[2]),
 		},
 		&checklist.CheckListOptions{
-			ClearAfter:   true,
+			ClearAfter:   false,
 			Fullscreen:   false,
-			WaitAllReady: true,
+			WaitAllReady: false,
 		},
 	)
-
-	fmt.Println("Starting:")
 
 	cl.Start(context.Background())
 

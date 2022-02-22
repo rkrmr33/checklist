@@ -2,6 +2,7 @@ package checklist
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/juju/ansiterm"
@@ -35,4 +36,12 @@ func printToTabWriter(w *ansiterm.TabWriter, items []string) error {
 	}
 
 	return nil
+}
+
+const ansi = "[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))"
+
+var re = regexp.MustCompile(ansi)
+
+func stripANSI(str string) string {
+	return re.ReplaceAllString(str, "")
 }
