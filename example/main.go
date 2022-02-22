@@ -40,9 +40,9 @@ func main() {
 
 	fmt.Println("Starting:")
 
-	// for i := 3; i > 0; i, _ = i-1, <-time.After(time.Millisecond*500) {
-	// 	fmt.Println(i)
-	// }
+	for i := 3; i > 0; i, _ = i-1, <-time.After(time.Millisecond*500) {
+		fmt.Println(i)
+	}
 
 	cl := checklist.NewCheckList(
 		os.Stdout,

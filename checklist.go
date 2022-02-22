@@ -87,16 +87,13 @@ type (
 	// Checker a function used to check the current state and info of a single list item
 	Checker func(ctx context.Context) (ListItemState, ListItemInfo)
 
-	// cleanWriter a writer that can be cleaned, like clearing the terminal.
+	// cleanWriter a writer that cleans the last printed data
+	// before flushing the new one
 	cleanWriter interface {
 		io.Writer
-		// cleans what was printed to the writer before
-		// fullscreen is true it means that the entire screen
-		// needs to be cleared instead of just the number of lines
-		// that were printed before
-		clean(fullscreen bool) error
-		// flush all the buffered date to the underlying writer
-		flush() error
+		// flush cleans the previously printed data and flushes
+		// all the buffered data to the underlying writer
+		flush(fullscreen bool) error
 	}
 )
 
@@ -152,28 +149,20 @@ func getOptions(o *CheckListOptions) *CheckListOptions {
 
 // Start starts the checklist
 func (cl *CheckList) Start(ctx context.Context) error {
+	t := time.NewTicker(cl.opts.Interval)
+
 	if err := cl.initWriter(); err != nil {
 		return err
 	}
 
-	if _, ok := cl.w.(*fileWriter); ok {
-		fmt.Println("using file writer")
-	}
-
-	t := time.NewTicker(cl.opts.Interval)
-
 	if cl.opts.ClearAfter {
 		defer func() {
-			_ = cl.w.clean(cl.opts.Fullscreen)
+			_ = cl.w.flush(cl.opts.Fullscreen)
 		}()
 	}
 
 	for !allReady(cl.curState, cl.opts.WaitAllReady) {
 		cl.refreshItems(ctx)
-
-		if err := cl.w.clean(cl.opts.Fullscreen); err != nil {
-			return err
-		}
 
 		if err := cl.printHeader(); err != nil {
 			return err
@@ -183,11 +172,7 @@ func (cl *CheckList) Start(ctx context.Context) error {
 			return err
 		}
 
-		if err := cl.tb.Flush(); err != nil {
-			return err
-		}
-
-		if err := cl.w.flush(); err != nil {
+		if err := cl.flush(); err != nil {
 			return err
 		}
 
@@ -201,6 +186,14 @@ func (cl *CheckList) Start(ctx context.Context) error {
 	return nil
 }
 
+func (cl *CheckList) flush() error {
+	if err := cl.tb.Flush(); err != nil {
+		return err
+	}
+
+	return cl.w.flush(cl.opts.Fullscreen)
+}
+
 func (cl *CheckList) initWriter() error {
 	f, ok := cl.rawWriter.(*os.File)
 	if !ok {
@@ -210,7 +203,7 @@ func (cl *CheckList) initWriter() error {
 		if fileInfo, err := f.Stat(); err != nil {
 			return err
 		} else if (fileInfo.Mode() & (os.ModeCharDevice | os.ModeSocket)) != 0 {
-			cl.w = newTerminalWriter(cl.rawWriter)
+			cl.w = newTerminalWriter(cl.rawWriter, int(f.Fd()))
 		} else {
 			cl.w = newFileWriter(cl.rawWriter)
 		}

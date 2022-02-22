@@ -25,11 +25,7 @@ func (w *fileWriter) Write(data []byte) (int, error) {
 	return w.buffer.Write(data)
 }
 
-func (w *fileWriter) clean(fullscreen bool) error {
-	return nil // noop
-}
-
-func (w *fileWriter) flush() error {
+func (w *fileWriter) flush(fullScreen bool) error {
 	defer w.buffer.Reset()
 
 	if w.buffer.String() == string(w.lastBytes) {
