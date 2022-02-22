@@ -90,11 +90,13 @@ type (
 	// cleanWriter a writer that can be cleaned, like clearing the terminal.
 	cleanWriter interface {
 		io.Writer
-		// Clean cleans what was printed to the writer before
+		// cleans what was printed to the writer before
 		// fullscreen is true it means that the entire screen
 		// needs to be cleared instead of just the number of lines
 		// that were printed before
 		clean(fullscreen bool) error
+		// flush all the buffered date to the underlying writer
+		flush() error
 	}
 )
 
@@ -182,6 +184,10 @@ func (cl *CheckList) Start(ctx context.Context) error {
 		}
 
 		if err := cl.tb.Flush(); err != nil {
+			return err
+		}
+
+		if err := cl.w.flush(); err != nil {
 			return err
 		}
 

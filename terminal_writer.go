@@ -1,6 +1,7 @@
 package checklist
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"sync"
@@ -10,31 +11,55 @@ type (
 	terminalWriter struct {
 		io.Writer
 		initialCursorPos sync.Once
+		buffer           *bytes.Buffer
+		lastBytes        []byte
 	}
 )
 
 func newTerminalWriter(w io.Writer) *terminalWriter {
 	return &terminalWriter{
-		Writer: w,
+		Writer:           w,
+		initialCursorPos: sync.Once{},
+		buffer:           &bytes.Buffer{},
+		lastBytes:        make([]byte, 0),
 	}
 }
 
 func (w *terminalWriter) Write(data []byte) (int, error) {
-	var err error
+	return w.buffer.Write(data)
+}
 
-	w.initialCursorPos.Do(func() {
-		err = w.saveCursorPos()
-	})
-	if err != nil {
-		return 0, err
+func (w *terminalWriter) flush() error {
+	defer w.buffer.Reset()
+
+	if w.buffer.String() == string(w.lastBytes) {
+		return nil
 	}
 
-	return w.Writer.Write(data)
+	newLastBytes := make([]byte, w.buffer.Len())
+	copy(newLastBytes, w.buffer.Bytes())
+	w.lastBytes = newLastBytes
+
+	if _, err := io.Copy(w.Writer, w.buffer); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (w *terminalWriter) clean(fullscreen bool) error {
+	var err error
+
+	w.initialCursorPos.Do(func() {
+		fmt.Printf("h")
+		err = w.saveCursorPos()
+	})
+	if err != nil {
+		return err
+	}
+
 	if fullscreen {
-		return w.clearScreen()
+		w.clearScreen()
 	}
 
 	return w.clearLines()
@@ -61,26 +86,26 @@ func (w *terminalWriter) clearLines() error {
 }
 
 func (w *terminalWriter) saveCursorPos() error {
-	_, err := fmt.Fprint(w.Writer, "\033[s")
+	_, err := fmt.Fprint(w.buffer, "\033[s")
 	return err
 }
 
 func (w *terminalWriter) restoreCursorPos() error {
-	_, err := fmt.Fprint(w, "\033[u")
+	_, err := fmt.Fprint(w.buffer, "\033[u")
 	return err
 }
 
 func (w *terminalWriter) clearFromCursorToEnd() error {
-	_, err := fmt.Fprint(w, "\033[J")
+	_, err := fmt.Fprint(w.buffer, "\033[J")
 	return err
 }
 
 func (w *terminalWriter) deleteAllLines() error {
-	_, err := fmt.Fprint(w, "\033[H\033[2J")
+	_, err := fmt.Fprint(w.buffer, "\033[H\033[2J")
 	return err
 }
 
 func (w *terminalWriter) moveTopLeft() error {
-	_, err := fmt.Fprint(w, "\033[0;0H")
+	_, err := fmt.Fprint(w.buffer, "\033[0;0H")
 	return err
 }
