@@ -3,11 +3,13 @@ package checklist
 import (
 	"fmt"
 	"io"
+	"sync"
 )
 
 type (
 	TerminalWriter struct {
 		io.Writer
+		initialCursorPos sync.Once
 	}
 )
 
@@ -17,28 +19,68 @@ func NewTerminalWriter(w io.Writer) *TerminalWriter {
 	}
 }
 
-func (w *TerminalWriter) Clean(lines int) error {
-	if lines == 0 {
-		return nil // do nothing
+func (w *TerminalWriter) Write(data []byte) (int, error) {
+	var err error
+
+	w.initialCursorPos.Do(func() {
+		err = w.saveCursorPos()
+	})
+	if err != nil {
+		return 0, err
 	}
 
-	if lines < 0 {
+	return w.Write(data)
+}
+
+func (w *TerminalWriter) Clean(fullscreen bool) error {
+	if fullscreen {
 		return w.clearScreen()
 	}
 
-	return w.clearLines(lines)
+	return w.clearLines()
 }
 
 func (w *TerminalWriter) clearScreen() error {
-	if _, err := fmt.Fprint(w, "\033[H\033[2J"); err != nil {
+	if err := w.deleteAllLines(); err != nil {
 		return err
 	}
 
-	_, err := fmt.Fprint(w, "\033[0;0H")
+	return w.moveTopLeft()
+}
+
+func (w *TerminalWriter) clearLines() error {
+	if err := w.restoreCursorPos(); err != nil {
+		return err
+	}
+
+	if err := w.clearFromCursorToEnd(); err != nil {
+		return err
+	}
+
+	return w.saveCursorPos()
+}
+
+func (w *TerminalWriter) saveCursorPos() error {
+	_, err := fmt.Fprint(w, "\033[s")
 	return err
 }
 
-func (w *TerminalWriter) clearLines(lines int) error {
-	_, err := fmt.Fprintf(w, "\033[%dF\033[J", lines)
+func (w *TerminalWriter) restoreCursorPos() error {
+	_, err := fmt.Fprint(w, "\033[u")
+	return err
+}
+
+func (w *TerminalWriter) clearFromCursorToEnd() error {
+	_, err := fmt.Fprint(w, "\033[J")
+	return err
+}
+
+func (w *TerminalWriter) deleteAllLines() error {
+	_, err := fmt.Fprint(w, "\033[H\033[2J")
+	return err
+}
+
+func (w *TerminalWriter) moveTopLeft() error {
+	_, err := fmt.Fprint(w, "\033[0;0H")
 	return err
 }

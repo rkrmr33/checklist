@@ -10,8 +10,6 @@ import (
 )
 
 func main() {
-	w := checklist.NewTerminalWriter(os.Stdout)
-
 	items := []fakeItem{
 		{
 			name:         "item1",
@@ -35,19 +33,24 @@ func main() {
 			readyAfter:   7 * time.Second,
 			state:        checklist.Waiting,
 			finalState:   checklist.Error,
+			errMessage:   "some error aef aejfj aefj aejf jae fja efja ejf aejf aejf aje fja efja efj aejfaje fjae fja efj aejf ajef jae fjae fja efja jf aejf aejf aje fja efja efj aejfaje fjae fja efj aejf ajef jae fjae fja efja jf aejf aejf aje fja efja efj aejfaje fjae fja efj aejf ajef jae fjae fja efja ejf aejf ajef aje fjae fjae fj aejf aejf aje fjae f",
 			finalMessage: "failed to complete task",
 		},
 	}
 
 	cl := checklist.NewCheckList(
-		w,
-		[]string{"NAME", "INFO", "MESSAGE"},
+		checklist.NewTerminalWriter(os.Stdout),
+		[]string{"NAME", "INFO", "MESSAGE", "ERROR"},
 		[]checklist.Checker{
 			checkerForItem(items[0]),
 			checkerForItem(items[1]),
 			checkerForItem(items[2]),
 		},
-		&checklist.CheckListOptions{ClearAfter: true},
+		&checklist.CheckListOptions{
+			ClearAfter:   true,
+			Fullscreen:   true,
+			WaitAllReady: true,
+		},
 	)
 
 	fmt.Println("Starting:")
@@ -64,6 +67,8 @@ type (
 		readyAfter   time.Duration
 		state        checklist.ListItemState
 		message      string
+		err          string
+		errMessage   string
 		finalState   checklist.ListItemState
 		finalMessage string
 	}
@@ -74,12 +79,13 @@ func checkerForItem(i fakeItem) checklist.Checker {
 		<-time.After(i.readyAfter)
 		i.state = i.finalState
 		i.message = i.finalMessage
+		i.err = i.errMessage
 	}()
 
 	return func(ctx context.Context) (checklist.ListItemState, checklist.ListItemInfo) {
 		// simulate time to calculate state
 		<-time.After(100 * time.Millisecond)
 
-		return i.state, []string{i.name, i.info, i.message}
+		return i.state, []string{i.name, i.info, i.message, i.err}
 	}
 }

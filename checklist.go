@@ -73,16 +73,20 @@ type (
 		// ClearAfter if true will clear the check list from the
 		// screen after all the checks are done
 		ClearAfter bool
+		// WaitAllReady if true will not stop the checklist until
+		// all items are in ready state instead of waiting for
+		// ready or error state
+		WaitAllReady bool
 	}
 
 	// CleanWriter a writer that can be cleaned, like clearing the terminal.
 	CleanWriter interface {
 		io.Writer
 		// Clean cleans what was printed to the writer before
-		// if the number of lines is -1 it means that the
-		// entire screen needs to be cleared instead of just
-		// the number of lines
-		Clean(linesPrinted int) error
+		// fullscreen is true it means that the entire screen
+		// needs to be cleared instead of just the number of lines
+		// that were printed before
+		Clean(fullscreen bool) error
 	}
 
 	// ListItemState holds the state of a list item
@@ -127,6 +131,8 @@ func getOptions(o *CheckListOptions) *CheckListOptions {
 	opts.NoColor = o.NoColor
 	opts.Fullscreen = o.Fullscreen
 	opts.ClearAfter = o.ClearAfter
+	opts.WaitAllReady = o.WaitAllReady
+
 	if os.Getenv("NO_COLOR") == "true" || os.Getenv("TERM") == "dumb" {
 		opts.NoColor = true
 	}
@@ -145,22 +151,17 @@ func getOptions(o *CheckListOptions) *CheckListOptions {
 // Start starts the checklist
 func (cl *CheckList) Start(ctx context.Context) error {
 	t := time.NewTicker(cl.opts.Interval)
-	linesPrinted := 0
 
 	if cl.opts.ClearAfter {
 		defer func() {
-			_ = cl.w.Clean(linesPrinted)
+			_ = cl.w.Clean(cl.opts.Fullscreen)
 		}()
 	}
 
-	for !allReady(cl.curState) {
+	for !allReady(cl.curState, cl.opts.WaitAllReady) {
 		cl.refreshItems(ctx)
 
-		if cl.opts.Fullscreen {
-			linesPrinted = -1
-		}
-
-		if err := cl.w.Clean(linesPrinted); err != nil {
+		if err := cl.w.Clean(cl.opts.Fullscreen); err != nil {
 			return err
 		}
 
@@ -171,8 +172,6 @@ func (cl *CheckList) Start(ctx context.Context) error {
 		if err := cl.printItems(); err != nil {
 			return err
 		}
-
-		linesPrinted = len(cl.items) + 1
 
 		if err := cl.tb.Flush(); err != nil {
 			return err
@@ -259,6 +258,10 @@ func (cl *CheckList) colorize(s string, codes ...int) string {
 	return fmt.Sprintf("%s[%sm%s%s[%dm", escape, sequence, s, escape, noFormat)
 }
 
-func (s ListItemState) isFinal() bool {
+func (s ListItemState) isFinal(waitAllReady bool) bool {
+	if waitAllReady {
+		return s == Ready
+	}
+
 	return s != Waiting
 }
