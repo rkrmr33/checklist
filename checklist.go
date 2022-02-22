@@ -50,11 +50,12 @@ var (
 type (
 	// CheckList holds the state of a check list
 	CheckList struct {
-		w       CleanWriter
-		tb      *ansiterm.TabWriter
-		headers ListItemInfo
-		items   []Checker
-		opts    *CheckListOptions
+		rawWriter io.Writer
+		w         cleanWriter
+		tb        *ansiterm.TabWriter
+		headers   ListItemInfo
+		items     []Checker
+		opts      *CheckListOptions
 
 		curState []ListItemState
 		curInfos []ListItemInfo
@@ -73,16 +74,10 @@ type (
 		// ClearAfter if true will clear the check list from the
 		// screen after all the checks are done
 		ClearAfter bool
-	}
-
-	// CleanWriter a writer that can be cleaned, like clearing the terminal.
-	CleanWriter interface {
-		io.Writer
-		// Clean cleans what was printed to the writer before
-		// if the number of lines is -1 it means that the
-		// entire screen needs to be cleared instead of just
-		// the number of lines
-		Clean(linesPrinted int) error
+		// WaitAllReady if true will not stop the checklist until
+		// all items are in ready state instead of waiting for
+		// ready or error state
+		WaitAllReady bool
 	}
 
 	// ListItemState holds the state of a list item
@@ -91,6 +86,16 @@ type (
 	ListItemInfo []string
 	// Checker a function used to check the current state and info of a single list item
 	Checker func(ctx context.Context) (ListItemState, ListItemInfo)
+
+	// cleanWriter a writer that can be cleaned, like clearing the terminal.
+	cleanWriter interface {
+		io.Writer
+		// Clean cleans what was printed to the writer before
+		// fullscreen is true it means that the entire screen
+		// needs to be cleared instead of just the number of lines
+		// that were printed before
+		clean(fullscreen bool) error
+	}
 )
 
 // Item states
@@ -104,13 +109,12 @@ const (
 )
 
 // NewCheckList creates a new checklist
-func NewCheckList(w CleanWriter, headers ListItemInfo, items []Checker, opts *CheckListOptions) *CheckList {
+func NewCheckList(w io.Writer, headers ListItemInfo, items []Checker, opts *CheckListOptions) *CheckList {
 	return &CheckList{
-		w:       w,
-		tb:      ansiterm.NewTabWriter(w, 0, 0, 2, ' ', 0),
-		headers: headers,
-		items:   items,
-		opts:    getOptions(opts),
+		rawWriter: w,
+		headers:   headers,
+		items:     items,
+		opts:      getOptions(opts),
 	}
 }
 
@@ -127,6 +131,8 @@ func getOptions(o *CheckListOptions) *CheckListOptions {
 	opts.NoColor = o.NoColor
 	opts.Fullscreen = o.Fullscreen
 	opts.ClearAfter = o.ClearAfter
+	opts.WaitAllReady = o.WaitAllReady
+
 	if os.Getenv("NO_COLOR") == "true" || os.Getenv("TERM") == "dumb" {
 		opts.NoColor = true
 	}
@@ -144,23 +150,26 @@ func getOptions(o *CheckListOptions) *CheckListOptions {
 
 // Start starts the checklist
 func (cl *CheckList) Start(ctx context.Context) error {
+	if err := cl.initWriter(); err != nil {
+		return err
+	}
+
+	if _, ok := cl.w.(*fileWriter); ok {
+		fmt.Println("using file writer")
+	}
+
 	t := time.NewTicker(cl.opts.Interval)
-	linesPrinted := 0
 
 	if cl.opts.ClearAfter {
 		defer func() {
-			_ = cl.w.Clean(linesPrinted)
+			_ = cl.w.clean(cl.opts.Fullscreen)
 		}()
 	}
 
-	for !allReady(cl.curState) {
+	for !allReady(cl.curState, cl.opts.WaitAllReady) {
 		cl.refreshItems(ctx)
 
-		if cl.opts.Fullscreen {
-			linesPrinted = -1
-		}
-
-		if err := cl.w.Clean(linesPrinted); err != nil {
+		if err := cl.w.clean(cl.opts.Fullscreen); err != nil {
 			return err
 		}
 
@@ -172,8 +181,6 @@ func (cl *CheckList) Start(ctx context.Context) error {
 			return err
 		}
 
-		linesPrinted = len(cl.items) + 1
-
 		if err := cl.tb.Flush(); err != nil {
 			return err
 		}
@@ -184,6 +191,26 @@ func (cl *CheckList) Start(ctx context.Context) error {
 		case <-t.C:
 		}
 	}
+
+	return nil
+}
+
+func (cl *CheckList) initWriter() error {
+	f, ok := cl.rawWriter.(*os.File)
+	if !ok {
+		// not tty
+		cl.w = newFileWriter(cl.rawWriter)
+	} else {
+		if fileInfo, err := f.Stat(); err != nil {
+			return err
+		} else if (fileInfo.Mode() & (os.ModeCharDevice | os.ModeSocket)) != 0 {
+			cl.w = newTerminalWriter(cl.rawWriter)
+		} else {
+			cl.w = newFileWriter(cl.rawWriter)
+		}
+	}
+
+	cl.tb = ansiterm.NewTabWriter(cl.w, 0, 0, 2, ' ', 0)
 
 	return nil
 }
@@ -259,6 +286,10 @@ func (cl *CheckList) colorize(s string, codes ...int) string {
 	return fmt.Sprintf("%s[%sm%s%s[%dm", escape, sequence, s, escape, noFormat)
 }
 
-func (s ListItemState) isFinal() bool {
+func (s ListItemState) isFinal(waitAllReady bool) bool {
+	if waitAllReady {
+		return s == Ready
+	}
+
 	return s != Waiting
 }

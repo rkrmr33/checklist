@@ -7,13 +7,13 @@ import (
 	"github.com/juju/ansiterm"
 )
 
-func allReady(s []ListItemState) bool {
+func allReady(s []ListItemState, waitAllReady bool) bool {
 	if len(s) == 0 {
 		return false
 	}
 
 	for _, state := range s {
-		if !state.isFinal() {
+		if !state.isFinal(waitAllReady) {
 			return false
 		}
 	}
