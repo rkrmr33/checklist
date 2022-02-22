@@ -7,19 +7,19 @@ import (
 )
 
 type (
-	TerminalWriter struct {
+	terminalWriter struct {
 		io.Writer
 		initialCursorPos sync.Once
 	}
 )
 
-func NewTerminalWriter(w io.Writer) *TerminalWriter {
-	return &TerminalWriter{
+func newTerminalWriter(w io.Writer) *terminalWriter {
+	return &terminalWriter{
 		Writer: w,
 	}
 }
 
-func (w *TerminalWriter) Write(data []byte) (int, error) {
+func (w *terminalWriter) Write(data []byte) (int, error) {
 	var err error
 
 	w.initialCursorPos.Do(func() {
@@ -29,10 +29,10 @@ func (w *TerminalWriter) Write(data []byte) (int, error) {
 		return 0, err
 	}
 
-	return w.Write(data)
+	return w.Writer.Write(data)
 }
 
-func (w *TerminalWriter) Clean(fullscreen bool) error {
+func (w *terminalWriter) clean(fullscreen bool) error {
 	if fullscreen {
 		return w.clearScreen()
 	}
@@ -40,7 +40,7 @@ func (w *TerminalWriter) Clean(fullscreen bool) error {
 	return w.clearLines()
 }
 
-func (w *TerminalWriter) clearScreen() error {
+func (w *terminalWriter) clearScreen() error {
 	if err := w.deleteAllLines(); err != nil {
 		return err
 	}
@@ -48,7 +48,7 @@ func (w *TerminalWriter) clearScreen() error {
 	return w.moveTopLeft()
 }
 
-func (w *TerminalWriter) clearLines() error {
+func (w *terminalWriter) clearLines() error {
 	if err := w.restoreCursorPos(); err != nil {
 		return err
 	}
@@ -60,27 +60,27 @@ func (w *TerminalWriter) clearLines() error {
 	return w.saveCursorPos()
 }
 
-func (w *TerminalWriter) saveCursorPos() error {
-	_, err := fmt.Fprint(w, "\033[s")
+func (w *terminalWriter) saveCursorPos() error {
+	_, err := fmt.Fprint(w.Writer, "\033[s")
 	return err
 }
 
-func (w *TerminalWriter) restoreCursorPos() error {
+func (w *terminalWriter) restoreCursorPos() error {
 	_, err := fmt.Fprint(w, "\033[u")
 	return err
 }
 
-func (w *TerminalWriter) clearFromCursorToEnd() error {
+func (w *terminalWriter) clearFromCursorToEnd() error {
 	_, err := fmt.Fprint(w, "\033[J")
 	return err
 }
 
-func (w *TerminalWriter) deleteAllLines() error {
+func (w *terminalWriter) deleteAllLines() error {
 	_, err := fmt.Fprint(w, "\033[H\033[2J")
 	return err
 }
 
-func (w *TerminalWriter) moveTopLeft() error {
+func (w *terminalWriter) moveTopLeft() error {
 	_, err := fmt.Fprint(w, "\033[0;0H")
 	return err
 }

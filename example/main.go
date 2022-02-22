@@ -24,22 +24,22 @@ func main() {
 			info:         "another fake item",
 			readyAfter:   3 * time.Second,
 			state:        checklist.Waiting,
-			finalState:   checklist.Ready,
-			finalMessage: "task completed",
+			finalState:   checklist.Error,
+			errMessage:   "some error aef aejfj aefj aejf jae fja efja ejf aejf aejf aje fja efja efj aejfaje fjae fja efj aejf ajef jae fjae fja efja jf aejf aejf aje fja efja efj aejfaje fjae fja efj aejf ajef jae fjae fja efja jf aejf aejf aje fja efja efj aejfaje fjae fja efj aejf ajef jae fjae fja efja ejf aejf ajef aje fjae fjae fj aejf aejf aje fjae f",
+			finalMessage: "failed to complete task",
 		},
 		{
 			name:         "item3",
 			info:         "last fake item",
 			readyAfter:   7 * time.Second,
 			state:        checklist.Waiting,
-			finalState:   checklist.Error,
-			errMessage:   "some error aef aejfj aefj aejf jae fja efja ejf aejf aejf aje fja efja efj aejfaje fjae fja efj aejf ajef jae fjae fja efja jf aejf aejf aje fja efja efj aejfaje fjae fja efj aejf ajef jae fjae fja efja jf aejf aejf aje fja efja efj aejfaje fjae fja efj aejf ajef jae fjae fja efja ejf aejf ajef aje fjae fjae fj aejf aejf aje fjae f",
-			finalMessage: "failed to complete task",
+			finalState:   checklist.Ready,
+			finalMessage: "task completed",
 		},
 	}
 
 	cl := checklist.NewCheckList(
-		checklist.NewTerminalWriter(os.Stdout),
+		os.Stdout,
 		[]string{"NAME", "INFO", "MESSAGE", "ERROR"},
 		[]checklist.Checker{
 			checkerForItem(items[0]),
@@ -48,7 +48,7 @@ func main() {
 		},
 		&checklist.CheckListOptions{
 			ClearAfter:   true,
-			Fullscreen:   true,
+			Fullscreen:   false,
 			WaitAllReady: true,
 		},
 	)
